@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -15,9 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-import { addDays } from "date-fns";
+import { Input } from "@/components/ui/input";
+
+interface IssueBookModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
 
 interface Book {
   id: string;
@@ -32,22 +39,22 @@ interface Member {
   email: string;
 }
 
-interface IssueBookModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
-}
-
 const IssueBookModal = ({ open, onOpenChange, onSuccess }: IssueBookModalProps) => {
   const [books, setBooks] = useState<Book[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedBook, setSelectedBook] = useState("");
   const [selectedMember, setSelectedMember] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Fetch available books (quantity > 0) and active members
   useEffect(() => {
     if (open) {
       fetchBooksAndMembers();
+      // Set default due date to 14 days from now
+      const defaultDueDate = new Date();
+      defaultDueDate.setDate(defaultDueDate.getDate() + 14);
+      setDueDate(defaultDueDate.toISOString().split("T")[0]);
     }
   }, [open]);
 
@@ -73,67 +80,51 @@ const IssueBookModal = ({ open, onOpenChange, onSuccess }: IssueBookModalProps) 
 
       setBooks(booksData || []);
       setMembers(membersData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load books and members",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      toast.error("Error loading data: " + error.message);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!selectedBook || !selectedMember) {
-      toast({
-        title: "Validation Error",
-        description: "Please select both a book and a member",
-        variant: "destructive",
-      });
+    
+    if (!selectedBook || !selectedMember || !dueDate) {
+      toast.error("Please fill in all fields");
       return;
     }
 
     setLoading(true);
-
     try {
-      // FIX: Calculate due date (14 days from now)
-      const dueDate = addDays(new Date(), 14);
-
-      // FIX: Insert book issue - database trigger will automatically decrease book quantity
-      // and prevent issuing if quantity is 0 (via the decrease_book_quantity function)
+      // CRITICAL: Insert will trigger decrease_book_quantity function automatically
+      // This ensures atomic operation - either both insert and quantity decrease succeed, or both fail
       const { error } = await supabase.from("book_issues").insert({
         book_id: selectedBook,
         member_id: selectedMember,
-        due_date: dueDate.toISOString(),
+        due_date: dueDate,
         status: "issued",
       });
 
       if (error) {
-        // FIX: Check if error is due to stock validation
+        // Handle out of stock error from trigger
         if (error.message.includes("out of stock")) {
           throw new Error("This book is currently out of stock");
         }
         throw error;
       }
 
-      toast({
-        title: "Success",
-        description: "Book issued successfully",
-      });
+      toast.success("Book issued successfully. Available quantity decreased automatically.");
 
-      onSuccess();
-      onOpenChange(false);
+      // Reset form
       setSelectedBook("");
       setSelectedMember("");
+      const defaultDueDate = new Date();
+      defaultDueDate.setDate(defaultDueDate.getDate() + 14);
+      setDueDate(defaultDueDate.toISOString().split("T")[0]);
+      
+      onSuccess();
+      onOpenChange(false);
     } catch (error: any) {
-      console.error("Error issuing book:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to issue book",
-        variant: "destructive",
-      });
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }
@@ -141,62 +132,75 @@ const IssueBookModal = ({ open, onOpenChange, onSuccess }: IssueBookModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Issue Book</DialogTitle>
+          <DialogDescription>
+            Issue a book to a member. Quantity will be automatically decreased.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="member">Select Member</Label>
-            <Select value={selectedMember} onValueChange={setSelectedMember}>
-              <SelectTrigger id="member">
-                <SelectValue placeholder="Choose a member" />
-              </SelectTrigger>
-              <SelectContent>
-                {members.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.full_name} ({member.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="book">Select Book</Label>
+              <Select value={selectedBook} onValueChange={setSelectedBook}>
+                <SelectTrigger id="book">
+                  <SelectValue placeholder="Choose a book" />
+                </SelectTrigger>
+                <SelectContent>
+                  {books.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">No books available</div>
+                  ) : (
+                    books.map((book) => (
+                      <SelectItem key={book.id} value={book.id}>
+                        {book.title} by {book.author} (Available: {book.available_quantity})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="member">Select Member</Label>
+              <Select value={selectedMember} onValueChange={setSelectedMember}>
+                <SelectTrigger id="member">
+                  <SelectValue placeholder="Choose a member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {members.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">No active members</div>
+                  ) : (
+                    members.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.full_name} ({member.email})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="dueDate">Due Date</Label>
+              <Input
+                id="dueDate"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                min={new Date().toISOString().split("T")[0]}
+              />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="book">Select Book</Label>
-            <Select value={selectedBook} onValueChange={setSelectedBook}>
-              <SelectTrigger id="book">
-                <SelectValue placeholder="Choose a book" />
-              </SelectTrigger>
-              <SelectContent>
-                {books.map((book) => (
-                  <SelectItem key={book.id} value={book.id}>
-                    {book.title} by {book.author} (Available: {book.available_quantity})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {books.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No books available. All books are currently issued.
-              </p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Issue Book
+            <Button type="submit" disabled={loading || books.length === 0 || members.length === 0}>
+              {loading ? "Issuing..." : "Issue Book"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
