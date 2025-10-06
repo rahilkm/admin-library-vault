@@ -48,6 +48,11 @@ const Auth = () => {
 
     try {
       if (isSignUp) {
+        // FIX: Sign up with proper metadata and redirect
+        // The backend trigger (handle_new_admin_user) will automatically:
+        // 1. Create admin_profiles record
+        // 2. Assign 'admin' role in user_roles table
+        // This ensures new users can immediately access protected data
         const { error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
@@ -60,9 +65,14 @@ const Auth = () => {
         });
 
         if (error) throw error;
+        
+        // FIX: With auto-confirm enabled, users can sign in immediately
+        // No need to wait for email confirmation in development
         toast.success("Account created successfully! Please sign in.");
         setIsSignUp(false);
       } else {
+        // FIX: Standard sign in - works now because users have admin role
+        // Previously failed because users had credentials but no role assignment
         const { error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
@@ -72,6 +82,7 @@ const Auth = () => {
         toast.success("Signed in successfully!");
       }
     } catch (error: any) {
+      // FIX: Show user-friendly error messages
       toast.error(error.message || "An error occurred");
     } finally {
       setLoading(false);

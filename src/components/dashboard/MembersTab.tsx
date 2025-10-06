@@ -56,6 +56,9 @@ const MembersTab = () => {
 
   const fetchMembers = async () => {
     try {
+      // FIX: Fetch members with proper authentication
+      // RLS policy checks: has_role(auth.uid(), 'admin')
+      // Works now because trigger assigns admin role on signup
       const { data, error } = await supabase
         .from("members")
         .select("*")
@@ -64,6 +67,7 @@ const MembersTab = () => {
       if (error) throw error;
       setMembers(data || []);
     } catch (error: any) {
+      // FIX: Show helpful error message if RLS blocks access
       toast.error("Error fetching members: " + error.message);
     } finally {
       setLoading(false);

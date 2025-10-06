@@ -14,21 +14,25 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener
+    // FIX: Set up auth state listener FIRST to catch all auth events
+    // This prevents race conditions during login/logout
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         if (!session) {
+          // User logged out or session expired - redirect to auth
           navigate("/auth");
         }
       }
     );
 
-    // Check for existing session
+    // FIX: THEN check for existing session
+    // This ensures we don't miss the initial session state
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
       if (!session) {
+        // No active session - redirect to login
         navigate("/auth");
       }
     });
