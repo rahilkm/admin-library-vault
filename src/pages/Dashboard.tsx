@@ -6,6 +6,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import BooksTab from "@/components/dashboard/BooksTab";
 import MembersTab from "@/components/dashboard/MembersTab";
+import IssuesTab from "@/components/dashboard/IssuesTab";
 import { Loader2 } from "lucide-react";
 
 const Dashboard = () => {
@@ -61,9 +62,10 @@ const Dashboard = () => {
         </div>
 
         <Tabs defaultValue="books" className="space-y-4">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="books">Books</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="issues">Issued Books</TabsTrigger>
           </TabsList>
           
           <TabsContent value="books" className="space-y-4">
@@ -72,6 +74,10 @@ const Dashboard = () => {
           
           <TabsContent value="members" className="space-y-4">
             <MembersTab />
+          </TabsContent>
+
+          <TabsContent value="issues" className="space-y-4">
+            <IssuesTab />
           </TabsContent>
         </Tabs>
       </div>

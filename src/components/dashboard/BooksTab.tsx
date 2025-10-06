@@ -50,6 +50,26 @@ const BooksTab = () => {
 
   useEffect(() => {
     fetchBooks();
+
+    // FIX: Set up real-time subscription to update book quantities when books are issued/returned
+    const channel = supabase
+      .channel("books_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "books",
+        },
+        () => {
+          fetchBooks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
